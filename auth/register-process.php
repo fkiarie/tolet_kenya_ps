@@ -1,6 +1,9 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 session_start();
-require 'config/db.php';
+require '../config/db.php';  
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $name  = $_POST['name'];
@@ -8,7 +11,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $phone = $_POST['phone'];
     $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
 
-    $sql = "INSERT INTO agents (name, email, phone, password) VALUES (:name, :email, :phone, :password)";
+    $sql = "INSERT INTO agents (name, email, phone, password) 
+            VALUES (:name, :email, :phone, :password)";
     $stmt = $conn->prepare($sql);
     $stmt->execute([
         ':name' => $name,
