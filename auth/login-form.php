@@ -9,7 +9,7 @@
 <body class="bg-gray-100">
 <div class="flex h-screen">
   <!-- Left: Image -->
-  <div class="w-1/2 bg-cover" style="background-image: url('assets/images/property.jpg');"></div>
+  <div class="w-1/2 bg-cover" style="background-image: url('../assets/images/login-page.png');"></div>
 
   <!-- Right: Login Form -->
   <div class="w-1/2 flex items-center justify-center bg-white">
