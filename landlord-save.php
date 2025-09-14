@@ -8,8 +8,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $national_id = $_POST['national_id'];
     $phone = $_POST['phone'];
     $email = $_POST['email'];
-    $next_of_kin = $_POST['next_of_kin'];   // ✅ match DB
-    $kin_contact = $_POST['kin_contact'];   // ✅ match DB
+    $next_of_kin = $_POST['next_of_kin'];  
+    $kin_contact = $_POST['kin_contact']; 
     $bank_details = $_POST['bank_details'];
 
     // Uploads folder
