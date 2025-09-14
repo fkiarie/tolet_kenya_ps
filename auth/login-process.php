@@ -15,9 +15,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($user && password_verify($password, $user['password'])) {
-        $_SESSION['user_id'] = $user['id'];
+        $_SESSION['user_id']   = $user['id'];   // keep this
+        $_SESSION['agent_id']  = $user['id'];   // 👈 add this
         $_SESSION['user_name'] = $user['name'];
-        $_SESSION['role_type'] = "Agent"; // later you can expand roles
+        $_SESSION['role_type'] = "Agent";
 
         header("Location: ../dashboard.php");
         exit;
@@ -27,4 +28,3 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         exit;
     }
 }
-?>
