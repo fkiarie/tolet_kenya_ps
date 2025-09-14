@@ -43,6 +43,12 @@ $currentPage = basename($_SERVER['PHP_SELF']);
                     🏢 Buildings
                 </a>
             </li>
+             <li>
+                <a href="units.php"
+                    class="block px-4 py-2 rounded <?php echo $currentPage == 'units.php' ? 'bg-blue-600 text-white' : 'hover:bg-blue-100'; ?>">
+                    🏢 Units
+                </a>
+            </li>
             <li>
                 <a href="tenants.php"
                     class="block px-4 py-2 rounded <?php echo $currentPage == 'tenants.php' ? 'bg-blue-600 text-white' : 'hover:bg-blue-100'; ?>">
