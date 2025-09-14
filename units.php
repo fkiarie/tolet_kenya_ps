@@ -80,6 +80,7 @@ $units = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <?php echo $unit['tenant_name'] ? htmlspecialchars($unit['tenant_name']) : '-'; ?>
           </td>
           <td class="p-3">
+            <a href="unit-assign.php?id=<?php echo $unit['id']; ?>" class="text-green-600 hover:underline">Assign</a>|
             <a href="unit-edit.php?id=<?php echo $unit['id']; ?>" class="text-blue-600 hover:underline">Edit</a> | 
             <a href="unit-delete.php?id=<?php echo $unit['id']; ?>" 
                onclick="return confirm('Are you sure you want to delete this unit?');"

@@ -61,6 +61,7 @@ $tenants = $stmt->fetchAll(PDO::FETCH_ASSOC);
           <td class="p-3"><?php echo htmlspecialchars($tenant['email']); ?></td>
           <td class="p-3"><?php echo htmlspecialchars($tenant['national_id']); ?></td>
           <td class="p-3">
+            <a href="tenant-view.php?id=<?php echo $tenant['id']; ?>" class="text-blue-600 hover:underline">View</a> |</a>
             <a href="tenant-edit.php?id=<?php echo $tenant['id']; ?>" class="text-blue-600 hover:underline">Edit</a> | 
             <a href="tenant-delete.php?id=<?php echo $tenant['id']; ?>" 
                onclick="return confirm('Are you sure you want to delete this tenant?');"
