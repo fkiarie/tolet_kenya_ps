@@ -1,0 +1,87 @@
+<?php
+require 'auth/auth_check.php';
+require 'config/db.php';
+
+$sessionAgentId = $_SESSION['agent_id'] ?? $_SESSION['user_id'] ?? null;
+if (!$sessionAgentId) {
+    header("Location: login-form.php");
+    exit;
+}
+
+$id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+if (!$id) die("Missing building ID.");
+
+// fetch building
+$stmt = $conn->prepare("SELECT * FROM buildings WHERE id = ?");
+$stmt->execute([$id]);
+$building = $stmt->fetch(PDO::FETCH_ASSOC);
+if (!$building) die("Building not found.");
+
+// restrict: only the agent who owns the building can edit
+if ((int)$building['agent_id'] !== (int)$sessionAgentId) {
+    die("Access denied. You can only edit your own buildings.");
+}
+
+// landlords for dropdown
+$landlords = $conn->query("SELECT id, name FROM landlords ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+
+// agent info for display
+$agentStmt = $conn->prepare("SELECT id, name FROM agents WHERE id = ?");
+$agentStmt->execute([$sessionAgentId]);
+$agent = $agentStmt->fetch(PDO::FETCH_ASSOC);
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Edit Building - Tolet Kenya</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+<?php include 'includes/header.php'; ?>
+
+<div class="max-w-3xl mx-auto p-6">
+  <h2 class="text-2xl font-semibold mb-6">Edit Building</h2>
+
+  <form action="building-update.php" method="POST" class="bg-white p-6 rounded shadow-md grid grid-cols-2 gap-6">
+    <input type="hidden" name="id" value="<?php echo $building['id']; ?>">
+
+    <div class="col-span-2">
+      <label class="block mb-2 font-medium">Agent (you)</label>
+      <select name="agent_id" required class="w-full border rounded p-2">
+        <option value="<?php echo htmlspecialchars($agent['id']); ?>">
+          <?php echo htmlspecialchars($agent['name']) . ' (You)'; ?>
+        </option>
+      </select>
+    </div>
+
+    <div>
+      <label class="block mb-2 font-medium">Building Name</label>
+      <input type="text" name="name" required value="<?php echo htmlspecialchars($building['name']); ?>" class="w-full border rounded p-2">
+    </div>
+
+    <div>
+      <label class="block mb-2 font-medium">County</label>
+      <input type="text" name="county" required value="<?php echo htmlspecialchars($building['county']); ?>" class="w-full border rounded p-2">
+    </div>
+
+    <div class="col-span-2">
+      <label class="block mb-2 font-medium">Landlord</label>
+      <select name="landlord_id" required class="w-full border rounded p-2">
+        <?php foreach ($landlords as $landlord): ?>
+          <option value="<?php echo $landlord['id']; ?>" <?php echo $landlord['id'] == $building['landlord_id'] ? 'selected' : ''; ?>>
+            <?php echo htmlspecialchars($landlord['name']); ?>
+          </option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+
+    <div class="col-span-2">
+      <button type="submit" class="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Update Building</button>
+    </div>
+  </form>
+</div>
+
+<?php include 'includes/footer.php'; ?>
+</body>
+</html>
