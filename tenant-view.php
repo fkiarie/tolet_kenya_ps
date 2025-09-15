@@ -26,6 +26,32 @@ $stmt = $conn->prepare("
 ");
 $stmt->execute([$tenant_id]);
 $units = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Fetch ledger rows + payments for this tenant
+$stmt = $conn->prepare("
+    SELECT rl.*, u.unit_number, b.name AS building_name
+    FROM rent_ledger rl
+    JOIN units u ON rl.unit_id = u.id
+    JOIN buildings b ON u.building_id = b.id
+    WHERE rl.tenant_id = ?
+    ORDER BY rl.year DESC, rl.month DESC
+");
+$stmt->execute([$tenant_id]);
+$ledgers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Group payments per ledger
+$ledger_ids = array_column($ledgers, 'id');
+$payments_by_ledger = [];
+if ($ledger_ids) {
+    $in  = str_repeat('?,', count($ledger_ids)-1) . '?';
+    $stmt = $conn->prepare("SELECT * FROM payments WHERE ledger_id IN ($in) ORDER BY payment_date ASC");
+    $stmt->execute($ledger_ids);
+    $all_payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($all_payments as $p) {
+        $payments_by_ledger[$p['ledger_id']][] = $p;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -39,17 +65,18 @@ $units = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <?php include 'includes/header.php'; ?>
 
 <div class="max-w-5xl mx-auto p-6">
-    <?php if (isset($_GET['success'])): ?>
-  <div class="mb-4 p-3 bg-green-100 text-green-800 rounded relative">
-    <?php echo htmlspecialchars($_GET['success']); ?>
-    <button onclick="this.parentElement.remove();" class="absolute top-0 right-0 px-2">✖</button>
-  </div>
-<?php elseif (isset($_GET['error'])): ?>
-  <div class="mb-4 p-3 bg-red-100 text-red-800 rounded relative">
-    <?php echo htmlspecialchars($_GET['error']); ?>
-    <button onclick="this.parentElement.remove();" class="absolute top-0 right-0 px-2">✖</button>
-  </div>
-<?php endif; ?>
+  <!-- Alerts -->
+  <?php if (isset($_GET['success'])): ?>
+    <div class="mb-4 p-3 bg-green-100 text-green-800 rounded relative">
+      <?php echo htmlspecialchars($_GET['success']); ?>
+      <button onclick="this.parentElement.remove();" class="absolute top-0 right-0 px-2">✖</button>
+    </div>
+  <?php elseif (isset($_GET['error'])): ?>
+    <div class="mb-4 p-3 bg-red-100 text-red-800 rounded relative">
+      <?php echo htmlspecialchars($_GET['error']); ?>
+      <button onclick="this.parentElement.remove();" class="absolute top-0 right-0 px-2">✖</button>
+    </div>
+  <?php endif; ?>
 
   <h2 class="text-2xl font-semibold mb-6">Tenant Details</h2>
 
@@ -64,9 +91,8 @@ $units = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
   <!-- Assigned Units -->
   <h3 class="text-xl font-semibold mb-4">Assigned Units</h3>
-
   <?php if (count($units) > 0): ?>
-    <table class="w-full border border-gray-300 bg-white rounded shadow">
+    <table class="w-full border border-gray-300 bg-white rounded shadow mb-8">
       <thead>
         <tr class="bg-gray-200">
           <th class="px-4 py-2">Building</th>
@@ -99,43 +125,53 @@ $units = $stmt->fetchAll(PDO::FETCH_ASSOC);
       </tbody>
     </table>
   <?php else: ?>
-    <p class="text-gray-600">No units assigned yet.</p>
+    <p class="text-gray-600 mb-8">No units assigned yet.</p>
   <?php endif; ?>
 
-  <!-- Assign New Unit -->
-  <h3 class="text-xl font-semibold mt-8 mb-4">Assign New Unit</h3>
-
-  <?php
-  // Fetch vacant units
-  $stmt = $conn->query("
-      SELECT u.*, b.name AS building_name 
-      FROM units u
-      JOIN buildings b ON u.building_id = b.id
-      WHERE u.status = 'vacant' AND u.tenant_id IS NULL
-      ORDER BY b.name, u.unit_number
-  ");
-  $vacant_units = $stmt->fetchAll(PDO::FETCH_ASSOC);
-  ?>
-
-  <?php if (count($vacant_units) > 0): ?>
-    <form action="unit-assign-save.php" method="POST" class="flex items-center space-x-4">
-      <input type="hidden" name="tenant_id" value="<?php echo $tenant['id']; ?>">
-      <select name="unit_id" required class="border rounded p-2">
-        <option value="">-- Select Unit --</option>
-        <?php foreach ($vacant_units as $unit): ?>
-          <option value="<?php echo $unit['id']; ?>">
-            <?php echo htmlspecialchars($unit['building_name'] . " - " . $unit['unit_number'] . " (" . $unit['type'] . ")"); ?>
-          </option>
+  <!-- Payment History -->
+  <h3 class="text-xl font-semibold mb-4">Payment History</h3>
+  <?php if (count($ledgers) > 0): ?>
+    <table class="w-full border border-gray-300 bg-white rounded shadow">
+      <thead>
+        <tr class="bg-gray-200">
+          <th class="px-3 py-2">Period</th>
+          <th class="px-3 py-2">Building</th>
+          <th class="px-3 py-2">Unit</th>
+          <th class="px-3 py-2">Rent Due</th>
+          <th class="px-3 py-2">Paid</th>
+          <th class="px-3 py-2">Balance</th>
+          <th class="px-3 py-2">Payments</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($ledgers as $ledger): ?>
+        <tr class="border-b">
+          <td class="px-3 py-2"><?php echo $ledger['month']."/".$ledger['year']; ?></td>
+          <td class="px-3 py-2"><?php echo htmlspecialchars($ledger['building_name']); ?></td>
+          <td class="px-3 py-2"><?php echo htmlspecialchars($ledger['unit_number']); ?></td>
+          <td class="px-3 py-2"><?php echo number_format($ledger['rent_due'],2); ?></td>
+          <td class="px-3 py-2"><?php echo number_format($ledger['amount_paid'],2); ?></td>
+          <td class="px-3 py-2"><?php echo number_format($ledger['balance'],2); ?></td>
+          <td class="px-3 py-2">
+            <?php if (!empty($payments_by_ledger[$ledger['id']])): ?>
+              <ul class="list-disc list-inside text-sm text-gray-700">
+                <?php foreach ($payments_by_ledger[$ledger['id']] as $p): ?>
+                  <li><?php echo $p['payment_date']." - ".number_format($p['amount'],2); ?></li>
+                <?php endforeach; ?>
+              </ul>
+            <?php else: ?>
+              <span class="text-gray-500 text-sm">No payments</span>
+            <?php endif; ?>
+          </td>
+        </tr>
         <?php endforeach; ?>
-      </select>
-      <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-        Assign Unit
-      </button>
-    </form>
+      </tbody>
+    </table>
   <?php else: ?>
-    <p class="text-gray-600">No vacant units available.</p>
+    <p class="text-gray-600">No payment records yet.</p>
   <?php endif; ?>
 </div>
+
 <?php include 'includes/footer.php'; ?>
 </body>
 </html>
