@@ -2,9 +2,19 @@
 require 'auth/auth_check.php';
 require 'config/db.php';
 
-$stmt = $conn->query("SELECT * FROM landlords ORDER BY created_at DESC");
+// Get current agent
+$agent_id = $_SESSION['agent_id'] ?? null;
+//echo $agent_id;
+if (!$agent_id) {
+    die("Unauthorized: Agent not found in session.");
+}
+
+// Fetch only landlords that belong to this agent
+$stmt = $conn->prepare("SELECT * FROM landlords WHERE agent_id = :agent_id ORDER BY created_at DESC");
+$stmt->execute(['agent_id' => $agent_id]);
 $landlords = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
