@@ -4,6 +4,7 @@ require 'config/db.php';
 
 // ensure session agent id is available
 $sessionAgentId = $_SESSION['agent_id'] ?? $_SESSION['user_id'] ?? null;
+echo $sessionAgentId;
 if (!$sessionAgentId) {
     header("Location: login-form.php");
     exit;
