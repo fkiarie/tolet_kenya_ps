@@ -3,7 +3,7 @@ require 'auth/auth_check.php';
 require 'config/db.php';
 
 // Get current agent
-$agent_id = $_SESSION['agent_id']?? null;
+$agent_id = $_SESSION['agent_id'] ?? null;
 if (!$agent_id) {
     die("Unauthorized: Agent not found in session.");
 }
@@ -11,52 +11,86 @@ if (!$agent_id) {
 // ---- Summary Counts ----
 
 // Occupied units
-$stmt = $conn->query("SELECT COUNT(*) FROM units WHERE status='occupied'");
+$stmt = $conn->prepare("
+    SELECT COUNT(*)
+    FROM units u
+    JOIN buildings b ON u.building_id = b.id
+    JOIN landlords l ON b.landlord_id = l.id
+    WHERE u.status = 'occupied' AND l.agent_id = ?
+");
+$stmt->execute([$agent_id]);
 $occupied_units = $stmt->fetchColumn();
 
 // Vacant units
-$stmt = $conn->query("SELECT COUNT(*) FROM units WHERE status='vacant'");
+$stmt = $conn->prepare("
+    SELECT COUNT(*)
+    FROM units u
+    JOIN buildings b ON u.building_id = b.id
+    JOIN landlords l ON b.landlord_id = l.id
+    WHERE u.status = 'vacant' AND l.agent_id = ?
+");
+$stmt->execute([$agent_id]);
 $vacant_units = $stmt->fetchColumn();
 
 // Total tenants
-$stmt = $conn->query("SELECT COUNT(*) FROM tenants");
+$stmt = $conn->prepare("
+    SELECT COUNT(*)
+    FROM tenants t
+    JOIN units u ON u.tenant_id = t.id
+    JOIN buildings b ON u.building_id = b.id
+    JOIN landlords l ON b.landlord_id = l.id
+    WHERE l.agent_id = ?
+");
+$stmt->execute([$agent_id]);
 $total_tenants = $stmt->fetchColumn();
 
 // Monthly payments (this month)
 $stmt = $conn->prepare("
-    SELECT SUM(amount_paid) 
-    FROM payments 
-    WHERE YEAR(payment_date) = YEAR(CURDATE()) 
-      AND MONTH(payment_date) = MONTH(CURDATE())
+    SELECT SUM(p.amount_paid)
+    FROM payments p
+    JOIN units u ON p.unit_id = u.id
+    JOIN buildings b ON u.building_id = b.id
+    JOIN landlords l ON b.landlord_id = l.id
+    WHERE YEAR(p.payment_date) = YEAR(CURDATE())
+      AND MONTH(p.payment_date) = MONTH(CURDATE())
+      AND l.agent_id = ?
 ");
-$stmt->execute();
+$stmt->execute([$agent_id]);
 $monthly_payments = $stmt->fetchColumn() ?: 0;
 
 // ---- Recent Payments ----
-$stmt = $conn->query("
-    SELECT p.amount_paid, p.payment_date, 
-           t.name AS tenant_name, 
-           u.unit_number, 
+$stmt = $conn->prepare("
+    SELECT p.amount_paid, p.payment_date,
+           t.name AS tenant_name,
+           u.unit_number,
            b.name AS building_name
     FROM payments p
-    JOIN tenants t ON p.tenant_id = t.id
     JOIN units u ON p.unit_id = u.id
+    JOIN tenants t ON u.tenant_id = t.id
     JOIN buildings b ON u.building_id = b.id
+    JOIN landlords l ON b.landlord_id = l.id
+    WHERE l.agent_id = ?
     ORDER BY p.payment_date DESC
     LIMIT 5
 ");
+$stmt->execute([$agent_id]);
 $recent_payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // ---- Payments Trend (Last 6 months) ----
 $stmt = $conn->prepare("
-    SELECT DATE_FORMAT(payment_date, '%Y-%m') as ym, SUM(amount_paid) as total
-    FROM payments
-    WHERE payment_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+    SELECT DATE_FORMAT(p.payment_date, '%Y-%m') as ym,
+           SUM(p.amount_paid) as total
+    FROM payments p
+    JOIN units u ON p.unit_id = u.id
+    JOIN buildings b ON u.building_id = b.id
+    JOIN landlords l ON b.landlord_id = l.id
+    WHERE p.payment_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+      AND l.agent_id = ?
     GROUP BY ym
     ORDER BY ym
 ");
-$stmt->execute();
-$trend = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // key=ym, value=total
+$stmt->execute([$agent_id]);
+$trend = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
 $labels = array_keys($trend);
 $values = array_values($trend);
