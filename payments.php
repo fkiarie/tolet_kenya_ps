@@ -1,23 +1,37 @@
 <?php
 require 'auth/auth_check.php';
 require 'config/db.php';
+require 'lib/ledger.php';
+
+$agentId = current_agent_id();
 
 // get selected month & year
 $year = isset($_GET['year']) ? (int)$_GET['year'] : date('Y');
 $month = isset($_GET['month']) ? (int)$_GET['month'] : date('n');
 
-// fetch ledger rows for month
+// fetch ledger rows for this agent’s payments
 $stmt = $conn->prepare("
-  SELECT rl.*, u.unit_number, b.name AS building_name, t.name AS tenant_name, l.name AS landlord_name
+  SELECT rl.id AS ledger_id, rl.year, rl.month, rl.rent_due, rl.amount_paid, rl.balance, rl.status,
+         u.unit_number, b.name AS building_name, t.name AS tenant_name, l.name AS landlord_name
   FROM rent_ledger rl
   JOIN units u ON rl.unit_id = u.id
   JOIN buildings b ON u.building_id = b.id
   JOIN tenants t ON rl.tenant_id = t.id
   JOIN landlords l ON b.landlord_id = l.id
-  WHERE rl.year = :year AND rl.month = :month
+  WHERE rl.year = :year 
+    AND rl.month = :month
+    AND EXISTS (
+       SELECT 1 FROM payments p 
+       WHERE p.ledger_id = rl.id 
+         AND p.agent_id = :agent_id
+    )
   ORDER BY b.name, u.unit_number
 ");
-$stmt->execute([':year'=>$year, ':month'=>$month]);
+$stmt->execute([
+  ':year' => $year,
+  ':month' => $month,
+  ':agent_id' => $agentId
+]);
 $ledgers = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // totals
@@ -82,9 +96,10 @@ foreach($ledgers as $r){
           <th class="px-4 py-2">Tenant</th>
           <th class="px-4 py-2">Landlord</th>
           <th class="px-4 py-2">Rent Due</th>
-          <th class="px-4 py-2">Amount Paid</th>
+          <th class="px-4 py-2">Paid</th>
           <th class="px-4 py-2">Balance</th>
           <th class="px-4 py-2">Status</th>
+          <th class="px-4 py-2">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -100,14 +115,18 @@ foreach($ledgers as $r){
             <td class="px-4 py-2 <?= $row['balance'] > 0 ? 'text-red-600 font-semibold':'' ?>">
               <?= number_format($row['balance'],2); ?>
             </td>
+            <td class="px-4 py-2"><?= ucfirst($row['status']); ?></td>
             <td class="px-4 py-2">
-              <?= $row['balance'] > 0 ? 'Pending' : 'Cleared'; ?>
+              <a href="payment-add.php?ledger_id=<?= $row['ledger_id'] ?>" class="text-green-600 hover:underline">Add</a> |
+              <a href="payment-edit.php?ledger_id=<?= $row['ledger_id'] ?>" class="text-blue-600 hover:underline">Edit</a> |
+              <a href="payment-delete.php?ledger_id=<?= $row['ledger_id'] ?>" class="text-red-600 hover:underline"
+                 onclick="return confirm('Delete payments for this ledger?');">Delete</a>
             </td>
           </tr>
           <?php endforeach; ?>
         <?php else: ?>
           <tr>
-            <td colspan="8" class="text-center py-4 text-gray-600">No payments found for this period.</td>
+            <td colspan="9" class="text-center py-4 text-gray-600">No payments found for this period.</td>
           </tr>
         <?php endif; ?>
       </tbody>
@@ -118,7 +137,7 @@ foreach($ledgers as $r){
           <td class="px-4 py-2"><?= number_format($total_due,2); ?></td>
           <td class="px-4 py-2"><?= number_format($total_paid,2); ?></td>
           <td class="px-4 py-2"><?= number_format($total_balance,2); ?></td>
-          <td></td>
+          <td colspan="2"></td>
         </tr>
       </tfoot>
       <?php endif; ?>
