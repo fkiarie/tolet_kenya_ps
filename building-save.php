@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // basic validation
     if (!$landlord_id || $name === '' || $county === '') {
         $_SESSION['error'] = "Please fill all required fields.";
-        header("Location: add-building.php");
+        header("Location: building-add.php");
         exit;
     }
 
@@ -36,6 +36,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->execute([$agent_id, $landlord_id, $name, $county]);
 
     $_SESSION['success'] = "Building added successfully!";
-    header("Location: add-building.php");
+    header("Location: buildings.php");
     exit;
 }
