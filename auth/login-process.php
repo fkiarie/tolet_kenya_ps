@@ -35,7 +35,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $_SESSION['role_type'] = "Agent";
 
         // Debugging (comment this out later)
-        // echo "<pre>"; print_r($_SESSION); echo "</pre>"; exit;
+         echo "<pre>"; print_r($_SESSION); echo "</pre>"; exit;
 
         header("Location: ../dashboard.php");
         exit;
