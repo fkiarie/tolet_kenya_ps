@@ -14,8 +14,23 @@ $agentStmt = $conn->prepare("SELECT id, name FROM agents WHERE id = ?");
 $agentStmt->execute([$sessionAgentId]);
 $agent = $agentStmt->fetch(PDO::FETCH_ASSOC);
 
-// landlords for dropdown
-$landlords = $conn->query("SELECT id, name FROM landlords ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+// fetch landlords belonging to this agent
+$landlordStmt = $conn->prepare("SELECT id, name FROM landlords WHERE agent_id = ? ORDER BY name ASC");
+$landlordStmt->execute([$sessionAgentId]);
+$landlords = $landlordStmt->fetchAll(PDO::FETCH_ASSOC);
+
+// fetch tenants belonging to this agent (through units/buildings/landlords)
+$tenantStmt = $conn->prepare("
+    SELECT t.id, t.name 
+    FROM tenants t
+    JOIN units u ON u.tenant_id = t.id
+    JOIN buildings b ON u.building_id = b.id
+    JOIN landlords l ON b.landlord_id = l.id
+    WHERE l.agent_id = ?
+    ORDER BY t.name ASC
+");
+$tenantStmt->execute([$sessionAgentId]);
+$tenants = $tenantStmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -34,7 +49,7 @@ $landlords = $conn->query("SELECT id, name FROM landlords ORDER BY name ASC")->f
     <!-- Agent select (only current agent shown) -->
     <div class="col-span-2">
       <label class="block mb-2 font-medium">Agent (you)</label>
-      <select name="agent_id" required class="w-full border rounded p-2">
+      <select name="agent_id" required class="w-full border rounded p-2 bg-gray-100">
         <option value="<?php echo htmlspecialchars($agent['id']); ?>">
           <?php echo htmlspecialchars($agent['name']) . ' (You)'; ?>
         </option>
@@ -56,7 +71,9 @@ $landlords = $conn->query("SELECT id, name FROM landlords ORDER BY name ASC")->f
       <select name="landlord_id" required class="w-full border rounded p-2">
         <option value="">-- Select Landlord --</option>
         <?php foreach ($landlords as $landlord): ?>
-          <option value="<?php echo $landlord['id']; ?>"><?php echo htmlspecialchars($landlord['name']); ?></option>
+          <option value="<?php echo $landlord['id']; ?>">
+            <?php echo htmlspecialchars($landlord['name']); ?>
+          </option>
         <?php endforeach; ?>
       </select>
     </div>
