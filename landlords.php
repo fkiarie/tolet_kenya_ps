@@ -9,7 +9,7 @@ require 'config/db.php';
 
 // Get current agent
 $agent_id = $_SESSION['agent_id'] ?? null;
-//echo $agent_id;
+echo $agent_id;
 if (!$agent_id) {
     die("Unauthorized: Agent not found in session.");
 }
