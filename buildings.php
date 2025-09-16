@@ -2,15 +2,25 @@
 require 'auth/auth_check.php';
 require 'config/db.php';
 
-// Fetch all buildings with landlord name
-$stmt = $conn->query("
+// Get current agent
+$agent_id = $_SESSION['agent_id'] ?? null;
+
+if (!$agent_id) {
+    die("Unauthorized: Agent not found in session.");
+}
+
+// Fetch only buildings belonging to landlords under this agent
+$stmt = $conn->prepare("
   SELECT b.*, l.name AS landlord_name 
   FROM buildings b
   JOIN landlords l ON b.landlord_id = l.id
+  WHERE l.agent_id = :agent_id
   ORDER BY b.created_at DESC
 ");
+$stmt->execute(['agent_id' => $agent_id]);
 $buildings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
