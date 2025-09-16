@@ -15,11 +15,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // enforce that the posted agent id equals the logged-in agent id
     if ($postedAgentId !== (int)$sessionAgentId) {
-        // security: ignore posted value and use session value (or reject)
-        // Option A: reject:
-        die("Invalid agent selection. You may only create buildings for your own account.");
-        // Option B (safer UX): uncomment below to override instead of dying:
-        // $postedAgentId = (int)$sessionAgentId;
+        $_SESSION['error'] = "Invalid agent selection. You may only create buildings for your own account.";
+        header("Location: add-building.php");
+        exit;
     }
 
     $agent_id = $sessionAgentId;
@@ -29,13 +27,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // basic validation
     if (!$landlord_id || $name === '' || $county === '') {
-        die("Please fill all required fields.");
+        $_SESSION['error'] = "Please fill all required fields.";
+        header("Location: add-building.php");
+        exit;
     }
 
     $stmt = $conn->prepare("INSERT INTO buildings (agent_id, landlord_id, name, county) VALUES (?, ?, ?, ?)");
     $stmt->execute([$agent_id, $landlord_id, $name, $county]);
 
-    header("Location: buildings.php?success=added");
+    $_SESSION['success'] = "Building added successfully!";
+    header("Location: add-building.php");
     exit;
 }
-?>
