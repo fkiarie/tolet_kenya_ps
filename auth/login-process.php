@@ -17,7 +17,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     if ($user) {
         // Debug: check what we actually got
-        echo "<pre>"; print_r($user); echo "</pre>"; exit;
+        //echo "<pre>"; print_r($user); echo "</pre>"; exit;
 
         if (password_verify($password, $user['password'])) {
             $_SESSION['user_id']   = $user['id'];
