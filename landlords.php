@@ -1,14 +1,13 @@
 <?php
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
 require 'auth/auth_check.php';
 require 'config/db.php';
 
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 // Get current agent
-$agent_id = $_SESSION['agent_id'] ?? null;
+$agent_id = $_SESSION['agent_id'];
 echo $agent_id;
 if (!$agent_id) {
     die("Unauthorized: Agent not found in session.");
