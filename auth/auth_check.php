@@ -15,7 +15,7 @@ if (session_status() === PHP_SESSION_NONE) {
 // --- Check if user is logged in ---
 if (empty($_SESSION['user_id']) || empty($_SESSION['agent_id'])) {
     // No active login
-    header("Location: /auth/login-form.php");
+    header("Location: login-form.php");
     exit;
 }
 
