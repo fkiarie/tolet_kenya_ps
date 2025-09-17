@@ -1,140 +1,109 @@
 <?php
 require 'auth/auth_check.php';
 require 'config/db.php';
+require 'lib/ledger.php';
 
-// Defaults
-$year = date('Y');
-$month = date('n');
-$message = "";
+$agent_id = $_SESSION['agent_id'] ?? null;
+if (!$agent_id) {
+    die("Unauthorized: Agent not in session.");
+}
 
-// Fetch assigned tenants + units
-$stmt = $conn->query("
-    SELECT u.id as unit_id, u.unit_number, b.name AS building_name, t.id as tenant_id, t.name AS tenant_name, u.rent
-    FROM units u
-    JOIN buildings b ON u.building_id = b.id
-    JOIN tenants t ON u.tenant_id = t.id
-    WHERE u.status = 'occupied'
-    ORDER BY b.name, u.unit_number
-");
-$assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// get ledger_id from query if provided
+$ledger_id = $_GET['ledger_id'] ?? null;
+$ledger = null;
+$ledgers = [];
 
-// Handle form submission
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $tenant_id = $_POST['tenant_id'];
-    $unit_id   = $_POST['unit_id'];
-    $amount    = (float) $_POST['amount_paid'];
-    $year      = (int) $_POST['year'];
-    $month     = (int) $_POST['month'];
-
-    // fetch or create ledger row
-    $stmt = $conn->prepare("SELECT * FROM rent_ledger WHERE tenant_id=? AND unit_id=? AND year=? AND month=?");
-    $stmt->execute([$tenant_id, $unit_id, $year, $month]);
+if ($ledger_id) {
+    // fetch ledger row to confirm it belongs to this agent
+    $stmt = $conn->prepare("
+        SELECT rl.id, rl.year, rl.month, rl.rent_due, rl.amount_paid, rl.balance, rl.status,
+               t.name AS tenant_name, u.unit_number, b.name AS building_name
+        FROM rent_ledger rl
+        JOIN units u ON rl.unit_id = u.id
+        JOIN tenants t ON rl.tenant_id = t.id
+        JOIN buildings b ON u.building_id = b.id
+        JOIN landlords l ON b.landlord_id = l.id
+        WHERE rl.id = ? AND l.agent_id = ?
+    ");
+    $stmt->execute([$ledger_id, $agent_id]);
     $ledger = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$ledger) {
-        // create ledger row (new month)
-        // get unit rent
-        $stmtU = $conn->prepare("SELECT rent FROM units WHERE id=?");
-        $stmtU->execute([$unit_id]);
-        $rent = $stmtU->fetchColumn();
-
-        $stmtI = $conn->prepare("INSERT INTO rent_ledger (tenant_id, unit_id, year, month, rent_due, amount_paid, balance)
-                                 VALUES (?,?,?,?,?,?,?)");
-        $stmtI->execute([$tenant_id, $unit_id, $year, $month, $rent, 0, $rent]);
-        $ledger_id = $conn->lastInsertId();
-
-        $stmt = $conn->prepare("SELECT * FROM rent_ledger WHERE id=?");
-        $stmt->execute([$ledger_id]);
-        $ledger = $stmt->fetch(PDO::FETCH_ASSOC);
+        die("Ledger not found or not accessible.");
     }
-
-    // update ledger
-    $new_paid    = $ledger['amount_paid'] + $amount;
-    $new_balance = $ledger['rent_due'] - $new_paid;
-
-    $stmtU = $conn->prepare("UPDATE rent_ledger SET amount_paid=?, balance=? WHERE id=?");
-    $stmtU->execute([$new_paid, $new_balance, $ledger['id']]);
-
-    $message = "Payment recorded successfully.";
-
-    // if still balance and month ended, it will carry forward in next month ledger
+} else {
+    // load available ledgers for this agent
+    $stmt = $conn->prepare("
+        SELECT rl.id, rl.year, rl.month, rl.rent_due, rl.amount_paid, rl.balance, rl.status,
+               t.name AS tenant_name, u.unit_number, b.name AS building_name
+        FROM rent_ledger rl
+        JOIN units u ON rl.unit_id = u.id
+        JOIN tenants t ON rl.tenant_id = t.id
+        JOIN buildings b ON u.building_id = b.id
+        JOIN landlords l ON b.landlord_id = l.id
+        WHERE l.agent_id = ?
+        ORDER BY b.name, u.unit_number
+    ");
+    $stmt->execute([$agent_id]);
+    $ledgers = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Add Payment - Tolet Kenya</title>
+  <title>Add Payment</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100">
 <?php include 'includes/header.php'; ?>
 
-<div class="max-w-3xl mx-auto p-6">
+<div class="max-w-3xl mx-auto p-6 bg-white rounded shadow">
   <h2 class="text-2xl font-semibold mb-6">Add Payment</h2>
 
-  <?php if ($message): ?>
-    <div class="mb-4 p-3 bg-green-100 text-green-800 rounded">
-      <?= htmlspecialchars($message) ?>
-    </div>
-  <?php endif; ?>
+  <form action="payment-save.php" method="POST" class="space-y-4">
+    <?php if ($ledger): ?>
+      <input type="hidden" name="ledger_id" value="<?= $ledger['id'] ?>">
 
-  <form method="POST" class="bg-white p-6 rounded shadow space-y-4">
-    <!-- Tenant + Unit -->
-    <div>
-      <label class="block mb-2 font-medium">Tenant & Unit</label>
-      <select name="tenant_id" required class="border rounded p-2 w-full"
-              onchange="updateUnit(this)">
-        <option value="">-- Select Tenant & Unit --</option>
-        <?php foreach ($assignments as $a): ?>
-          <option value="<?= $a['tenant_id'] ?>"
-                  data-unit="<?= $a['unit_id'] ?>"
-                  data-rent="<?= $a['rent'] ?>">
-            <?= htmlspecialchars($a['tenant_name']." - ".$a['building_name']." ".$a['unit_number']." (Rent: ".$a['rent'].")") ?>
-          </option>
-        <?php endforeach; ?>
-      </select>
-      <input type="hidden" name="unit_id" id="unit_id">
-    </div>
-
-    <!-- Year & Month -->
-    <div class="grid grid-cols-2 gap-4">
       <div>
-        <label class="block mb-2 font-medium">Year</label>
-        <select name="year" class="border rounded p-2 w-full">
-          <?php for($y=date('Y')-2;$y<=date('Y')+1;$y++): ?>
-            <option value="<?= $y ?>" <?= $y==$year?'selected':'' ?>><?= $y ?></option>
-          <?php endfor; ?>
+        <label class="block text-sm font-medium">Ledger</label>
+        <p class="p-2 border rounded bg-gray-50">
+          <?= htmlspecialchars($ledger['building_name']) ?> - Unit <?= htmlspecialchars($ledger['unit_number']) ?> 
+          (<?= htmlspecialchars($ledger['tenant_name']) ?>) 
+          — <?= $ledger['month'] ?>/<?= $ledger['year'] ?>
+        </p>
+      </div>
+    <?php else: ?>
+      <div>
+        <label class="block text-sm font-medium">Select Ledger</label>
+        <select name="ledger_id" required class="border rounded p-2 w-full">
+          <option value="">-- Choose --</option>
+          <?php foreach ($ledgers as $l): ?>
+            <option value="<?= $l['id'] ?>">
+              <?= htmlspecialchars($l['building_name']) ?> - Unit <?= htmlspecialchars($l['unit_number']) ?> 
+              (<?= htmlspecialchars($l['tenant_name']) ?>) — <?= $l['month'] ?>/<?= $l['year'] ?>
+            </option>
+          <?php endforeach; ?>
         </select>
       </div>
-      <div>
-        <label class="block mb-2 font-medium">Month</label>
-        <select name="month" class="border rounded p-2 w-full">
-          <?php for($m=1;$m<=12;$m++): ?>
-            <option value="<?= $m ?>" <?= $m==$month?'selected':'' ?>><?= date("F", mktime(0,0,0,$m,1)) ?></option>
-          <?php endfor; ?>
-        </select>
-      </div>
-    </div>
+    <?php endif; ?>
 
-    <!-- Amount Paid -->
     <div>
-      <label class="block mb-2 font-medium">Amount Paid</label>
+      <label class="block text-sm font-medium">Amount Paid</label>
       <input type="number" step="0.01" name="amount_paid" required class="border rounded p-2 w-full">
     </div>
 
-    <button type="submit" class="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-      Save Payment
-    </button>
+    <div>
+      <label class="block text-sm font-medium">Payment Date</label>
+      <input type="date" name="payment_date" value="<?= date('Y-m-d') ?>" required class="border rounded p-2 w-full">
+    </div>
+
+    <div class="flex justify-end space-x-3">
+      <a href="payments.php" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Cancel</a>
+      <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Save Payment</button>
+    </div>
   </form>
 </div>
-
-<script>
-function updateUnit(select){
-  var opt = select.options[select.selectedIndex];
-  document.getElementById('unit_id').value = opt.dataset.unit;
-}
-</script>
 
 <?php include 'includes/footer.php'; ?>
 </body>

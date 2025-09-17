@@ -1,45 +1,49 @@
 <?php
 require 'auth/auth_check.php';
 require 'config/db.php';
-require 'lib/ledger.php';
 
-$agentId = current_agent_id();
+// Ensure agent is logged in
+$agent_id = $_SESSION['agent_id'] ?? null;
+if (!$agent_id) {
+    die("Unauthorized: Agent not found in session.");
+}
 
-// get selected month & year
-$year = isset($_GET['year']) ? (int)$_GET['year'] : date('Y');
+// Get selected month & year
+$year  = isset($_GET['year']) ? (int)$_GET['year'] : date('Y');
 $month = isset($_GET['month']) ? (int)$_GET['month'] : date('n');
 
-// fetch ledger rows for this agent’s payments
+// Fetch payments belonging to this agent
 $stmt = $conn->prepare("
-  SELECT rl.id AS ledger_id, rl.year, rl.month, rl.rent_due, rl.amount_paid, rl.balance, rl.status,
-         u.unit_number, b.name AS building_name, t.name AS tenant_name, l.name AS landlord_name
-  FROM rent_ledger rl
-  JOIN units u ON rl.unit_id = u.id
-  JOIN buildings b ON u.building_id = b.id
-  JOIN tenants t ON rl.tenant_id = t.id
-  JOIN landlords l ON b.landlord_id = l.id
-  WHERE rl.year = :year 
-    AND rl.month = :month
-    AND EXISTS (
-       SELECT 1 FROM payments p 
-       WHERE p.ledger_id = rl.id 
-         AND p.agent_id = :agent_id
-    )
-  ORDER BY b.name, u.unit_number
+    SELECT p.id AS payment_id, p.amount_paid, p.payment_date,
+           rl.id AS ledger_id, rl.year, rl.month, rl.rent_due, rl.amount_paid AS ledger_paid, rl.balance AS ledger_balance, rl.status,
+           u.unit_number, b.name AS building_name,
+           t.name AS tenant_name, l.name AS landlord_name
+    FROM payments p
+    JOIN rent_ledger rl ON p.ledger_id = rl.id
+    JOIN units u ON rl.unit_id = u.id
+    JOIN buildings b ON u.building_id = b.id
+    JOIN tenants t ON rl.tenant_id = t.id
+    JOIN landlords l ON b.landlord_id = l.id
+    WHERE p.agent_id = :agent_id
+      AND rl.year = :year
+      AND rl.month = :month
+    ORDER BY b.name, u.unit_number, p.payment_date DESC
 ");
 $stmt->execute([
-  ':year' => $year,
-  ':month' => $month,
-  ':agent_id' => $agentId
+    ':agent_id' => $agent_id,
+    ':year'     => $year,
+    ':month'    => $month
 ]);
-$ledgers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// totals
-$total_due=0; $total_paid=0; $total_balance=0;
-foreach($ledgers as $r){
-  $total_due += $r['rent_due'];
-  $total_paid += $r['amount_paid'];
-  $total_balance += $r['balance'];
+// Totals
+$total_due     = 0;
+$total_paid    = 0;
+$total_balance = 0;
+foreach ($payments as $p) {
+    $total_due     += $p['rent_due'];
+    $total_paid    += $p['ledger_paid'];
+    $total_balance += $p['ledger_balance'];
 }
 ?>
 <!DOCTYPE html>
@@ -96,48 +100,49 @@ foreach($ledgers as $r){
           <th class="px-4 py-2">Tenant</th>
           <th class="px-4 py-2">Landlord</th>
           <th class="px-4 py-2">Rent Due</th>
-          <th class="px-4 py-2">Paid</th>
+          <th class="px-4 py-2">Paid (This Month)</th>
           <th class="px-4 py-2">Balance</th>
           <th class="px-4 py-2">Status</th>
+          <th class="px-4 py-2">Payment Date</th>
           <th class="px-4 py-2">Actions</th>
         </tr>
       </thead>
       <tbody>
-        <?php if (count($ledgers) > 0): ?>
-          <?php foreach($ledgers as $row): ?>
+        <?php if (count($payments) > 0): ?>
+          <?php foreach($payments as $row): ?>
           <tr class="border-b">
             <td class="px-4 py-2"><?= htmlspecialchars($row['building_name']); ?></td>
             <td class="px-4 py-2"><?= htmlspecialchars($row['unit_number']); ?></td>
             <td class="px-4 py-2"><?= htmlspecialchars($row['tenant_name']); ?></td>
             <td class="px-4 py-2"><?= htmlspecialchars($row['landlord_name']); ?></td>
             <td class="px-4 py-2"><?= number_format($row['rent_due'],2); ?></td>
-            <td class="px-4 py-2"><?= number_format($row['amount_paid'],2); ?></td>
-            <td class="px-4 py-2 <?= $row['balance'] > 0 ? 'text-red-600 font-semibold':'' ?>">
-              <?= number_format($row['balance'],2); ?>
+            <td class="px-4 py-2"><?= number_format($row['ledger_paid'],2); ?></td>
+            <td class="px-4 py-2 <?= $row['ledger_balance'] > 0 ? 'text-red-600 font-semibold':'' ?>">
+              <?= number_format($row['ledger_balance'],2); ?>
             </td>
             <td class="px-4 py-2"><?= ucfirst($row['status']); ?></td>
+            <td class="px-4 py-2"><?= htmlspecialchars($row['payment_date']); ?></td>
             <td class="px-4 py-2">
-              <a href="payment-add.php?ledger_id=<?= $row['ledger_id'] ?>" class="text-green-600 hover:underline">Add</a> |
-              <a href="payment-edit.php?ledger_id=<?= $row['ledger_id'] ?>" class="text-blue-600 hover:underline">Edit</a> |
-              <a href="payment-delete.php?ledger_id=<?= $row['ledger_id'] ?>" class="text-red-600 hover:underline"
-                 onclick="return confirm('Delete payments for this ledger?');">Delete</a>
+              <a href="payment-edit.php?id=<?= $row['payment_id'] ?>" class="text-blue-600 hover:underline">Edit</a> |
+              <a href="payment-delete.php?id=<?= $row['payment_id'] ?>" class="text-red-600 hover:underline"
+                 onclick="return confirm('Delete this payment?');">Delete</a>
             </td>
           </tr>
           <?php endforeach; ?>
         <?php else: ?>
           <tr>
-            <td colspan="9" class="text-center py-4 text-gray-600">No payments found for this period.</td>
+            <td colspan="10" class="text-center py-4 text-gray-600">No payments found for this period.</td>
           </tr>
         <?php endif; ?>
       </tbody>
-      <?php if (count($ledgers) > 0): ?>
+      <?php if (count($payments) > 0): ?>
       <tfoot class="bg-gray-100 font-semibold">
         <tr>
           <td colspan="4" class="px-4 py-2 text-right">Totals:</td>
           <td class="px-4 py-2"><?= number_format($total_due,2); ?></td>
           <td class="px-4 py-2"><?= number_format($total_paid,2); ?></td>
           <td class="px-4 py-2"><?= number_format($total_balance,2); ?></td>
-          <td colspan="2"></td>
+          <td colspan="3"></td>
         </tr>
       </tfoot>
       <?php endif; ?>
