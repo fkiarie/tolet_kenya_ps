@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             }
 
             // Create or update ledger
-            upsert_ledger($conn, $unit_id, $tenant_id, $year, $month, $rent_due);
+           recalc_ledger_from_payments($conn, $unit_id, $tenant_id, $year, $month, $rent_due);
         }
 
         $conn->commit();
