@@ -31,10 +31,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     $conn->beginTransaction();
     try {
+        $entries_created = 0;
         foreach ($units as $u) {
             $unit_id = (int)$u['unit_id'];
             $tenant_id = $u['tenant_id'] ? (int)$u['tenant_id'] : null;
             $base_rent = (float)$u['rent'];
+
+            // If no tenant assigned, skip
+            if (!$tenant_id) {
+                continue;
+            }
 
             // Check previous balance (if any)
             $stmtPrev = $conn->prepare("SELECT balance FROM rent_ledger WHERE unit_id = ? AND year = ? AND month = ?");
@@ -45,20 +51,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             // If prevBalance is negative (credit), subtract it (i.e., base_rent + (-100) => base_rent - 100)
             $rent_due = round($base_rent + $prevBalance, 2);
 
-            // If no tenant assigned, we can still create ledger rows (optionally)
-            if (!$tenant_id) {
-                // Skip if you prefer not to create ledger rows without tenants
-                continue;
-            }
-
-            // Create or update ledger
-           recalc_ledger_from_payments($conn, $unit_id, $tenant_id, $year, $month, $rent_due);
+            // Create or update ledger entry
+            create_or_update_ledger_entry($conn, $unit_id, $tenant_id, $year, $month, $rent_due);
+            $entries_created++;
         }
 
         $conn->commit();
-        echo "Ledger generated for $year-$month\n";
+        echo "Ledger generated for $year-$month. Created/updated $entries_created entries.\n";
     } catch (Exception $e) {
         $conn->rollBack();
-        echo "Error: " . $e->getMessage();
+        echo "Error: " . $e->getMessage() . "\n";
+        // Add more debugging info
+        echo "Debug info - Year: $year, Month: $month, Units found: " . count($units) . "\n";
     }
 }
+?>
