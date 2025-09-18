@@ -6,7 +6,7 @@ if (session_status() === PHP_SESSION_NONE) {
 // get current file name
 $currentPage = basename($_SERVER['PHP_SELF']);
 $current_dir = basename(dirname($_SERVER['PHP_SELF']));
-$logout_path = ($current_dir === 'auth') ? 'logout.php' : '../tolet_kenya_ps/auth/logout.php';
+$logout_path = ($current_dir === 'auth') ? 'logout.php' : '/auth/logout.php';
 ?>
 
 <!-- Navbar -->
